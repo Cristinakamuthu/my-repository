@@ -38,7 +38,7 @@ with app.app_context():
             location=fake.city(),
             date_reported=fake.date_time_between(start_date="-60d", end_date="now"),
             reporter_id=reporter.id,
-            inventory_admin_id=choice(users[:3]).id  # pick an admin
+            inventory_admin_id=choice(users[:3]).id 
         )
         items.append(item)
         db.session.add(item)
