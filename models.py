@@ -8,21 +8,27 @@ from datetime import datetime
 class User(db.Model, SerializerMixin):
     __tablename__ = 'users'
 
-    serialize_rules = ('-items_reported.user', '-claims.claimant', '-comments.user', '-images.uploader',
-                       '-rewards_offered.offered_by_user', '-rewards_received.received_by_user')
+    serialize_rules = (
+        '-items_reported.user',
+        '-claims.claimant',
+        '-comments.user',
+        '-images.uploader',
+        '-rewards_offered.offered_by_user',
+        '-rewards_received.received_by_user',
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), nullable=False, unique=True)
     email = db.Column(db.String, unique=True, nullable=True)
     _password_hash = db.Column(db.String, nullable=True)
-    role = db.Column(db.String, default="user") # "admin" or "user"
+    role = db.Column(db.String, default="user")
 
-    items_reported = db.relationship('Item', backref='reporter', lazy=True)
-    claims = db.relationship('Claim', backref='claimant', lazy=True)
-    comments = db.relationship('Comment', backref='user', lazy=True)
-    images = db.relationship('Image', backref='uploader', lazy=True)
-    rewards_offered = db.relationship('Reward', foreign_keys='Reward.offered_by_id', backref='offered_by_user')
-    rewards_received = db.relationship('Reward', foreign_keys='Reward.received_by_id', backref='received_by_user')
+    items_reported = relationship('Item', backref='reporter', lazy=True, foreign_keys='Item.reporter_id', cascade='all, delete-orphan')
+    claims = relationship('Claim', backref='claimant', lazy=True, foreign_keys='Claim.claimant_id', cascade='all, delete-orphan')
+    comments = relationship('Comment', backref='user', lazy=True, cascade='all, delete-orphan')
+    images = relationship('Image', backref='uploader', lazy=True, cascade='all, delete-orphan')
+    rewards_offered = relationship('Reward', foreign_keys='Reward.offered_by_id', backref='offered_by_user', cascade='all, delete-orphan')
+    rewards_received = relationship('Reward', foreign_keys='Reward.received_by_id', backref='received_by_user', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f"<User #{self.id} - {self.username} ({self.role})>"
@@ -32,88 +38,107 @@ class User(db.Model, SerializerMixin):
         if email:
             if '@' not in email or '.' not in email:
                 raise ValueError("Please provide a suitable email address")
-            return email
+        return email
 
     @hybrid_property
     def password_hash(self):
         raise AttributeError("Password hashes are write-only.")
-    
+
     @password_hash.setter
     def password_hash(self, password):
         self._password_hash = bcrypt.generate_password_hash(password.encode()).decode()
-    
-    def Authenticate(self, password):
+
+    def authenticate(self, password):
         return self._password_hash and bcrypt.check_password_hash(self._password_hash, password.encode())
 
 
 class Item(db.Model, SerializerMixin):
     __tablename__ = "items"
 
-    serialize_rules = ('-comments.item', '-claims.item', '-reward.item', '-images.item', '-reporter.items_reported')
+    serialize_rules = (
+        '-comments.item',
+        '-claims.item',
+        '-reward.item',
+        '-images.item',
+        '-reporter.items_reported',
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
     description = db.Column(db.String)
-    status = db.Column(db.String, default='lost') # "lost","found","claimed"
+    status = db.Column(db.String, default='lost')
     location = db.Column(db.String)
     date_reported = db.Column(db.DateTime, default=datetime.utcnow)
 
-    reporter_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    inventory_admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    reporter_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    inventory_admin_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    comments = db.relationship('Comment', backref='item', lazy=True)
-    claims = db.relationship('Claim', backref='item', lazy=True)
-    reward = db.relationship('Reward', uselist=False, backref='item')  # One reward per item
-    images = db.relationship('Image', backref='item', lazy=True)
+    comments = relationship('Comment', backref='item', lazy=True, cascade='all, delete-orphan')
+    claims = relationship('Claim', backref='item', lazy=True, cascade='all, delete-orphan')
+    reward = relationship('Reward', uselist=False, backref='item', cascade='all, delete-orphan')
+    images = relationship('Image', backref='item', lazy=True, cascade='all, delete-orphan')
 
 
 class Claim(db.Model, SerializerMixin):
     __tablename__ = "claims"
 
-    serialize_rules = ('-item.claims', '-claimant.claims',)
+    serialize_rules = (
+        '-item.claims',
+        '-claimant.claims',
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    claimant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    status = db.Column(db.String, default="pending")  # "pending", "approved", "rejected"
+    item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
+    claimant_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    status = db.Column(db.String, default="pending")
     claimed_at = db.Column(db.DateTime, default=datetime.utcnow)
-    approved_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
 
 class Comment(db.Model, SerializerMixin):
     __tablename__ = "comments"
 
-    serialize_rules = ('-item.comments', '-user.comments',)
+    serialize_rules = (
+        '-item.comments',
+        '-user.comments',
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.Integer, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'))
+    content = db.Column(db.String, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    item_id = db.Column(db.Integer, db.ForeignKey('items.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Reward(db.Model, SerializerMixin):
     __tablename__ = "rewards"
 
-    serialize_rules = ('-item.reward', '-offered_by_user.rewards_offered', '-received_by_user.rewards_received')
+    serialize_rules = (
+        '-item.reward',
+        '-offered_by_user.rewards_offered',
+        '-received_by_user.rewards_received',
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    offered_by_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    received_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
+    offered_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    received_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     amount = db.Column(db.Float, nullable=False)
-    status = db.Column(db.String, default="offered")  # "offered", "paid", "received"
+    status = db.Column(db.String, default="offered")
     paid_at = db.Column(db.DateTime, nullable=True)
 
 
 class Image(db.Model, SerializerMixin):
     __tablename__ = "images"
 
-    serialize_rules = ('-item.images', '-uploader.images')
+    serialize_rules = (
+        '-item.images',
+        '-uploader.images',
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    image_url = db.Column(db.String, nullable=False) 
-    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
+    image_url = db.Column(db.String, nullable=False)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
