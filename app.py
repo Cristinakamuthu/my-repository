@@ -4,7 +4,7 @@ from flask_jwt_extended import (
     JWTManager, jwt_required, create_access_token, get_jwt_identity
 )
 from flask_restful import Api
-from flask_cors import CORS
+# from flask_cors import CORS
 from datetime import datetime
 from functools import wraps
 
@@ -23,7 +23,8 @@ migrate = Migrate(app, db)
 api = Api(app)
 jwt = JWTManager(app)
 
-# 🔒 Admin-only decorator
+
+
 def admin_only(fn):
     @wraps(fn)
     @jwt_required()
