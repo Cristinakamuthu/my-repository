@@ -10,7 +10,7 @@ fake = Faker()
 def seed():
     with app.app_context():
         # db.create_all()
-        print("🧹 Clearing old data...")
+        print(" Clearing old data...")
         db.session.query(Image).delete()
         db.session.query(Reward).delete()
         db.session.query(Comment).delete()
@@ -103,7 +103,7 @@ def seed():
 
         db.session.commit()
 
-        print("✅ Done seeding the database!")
+        print(" Done seeding the database!")
 
 if __name__ == "__main__":
     seed()
