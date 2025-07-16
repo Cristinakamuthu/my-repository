@@ -1,21 +1,10 @@
 from sqlalchemy.orm import validates, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy_serializer import SerializerMixin
 from config import db, bcrypt
 from datetime import datetime
 
-
-class User(db.Model, SerializerMixin):
+class User(db.Model):
     __tablename__ = 'users'
-
-    serialize_rules = (
-        '-items_reported.user',
-        '-claims.claimant',
-        '-comments.user',
-        '-images.uploader',
-        '-rewards_offered.offered_by_user',
-        '-rewards_received.received_by_user',
-    )
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), nullable=False, unique=True)
@@ -23,21 +12,18 @@ class User(db.Model, SerializerMixin):
     _password_hash = db.Column(db.String, nullable=True)
     role = db.Column(db.String, default="user")
 
-    items_reported = relationship('Item', backref='reporter', lazy=True, foreign_keys='Item.reporter_id', cascade='all, delete-orphan')
-    claims = relationship('Claim', backref='claimant', lazy=True, foreign_keys='Claim.claimant_id', cascade='all, delete-orphan')
-    comments = relationship('Comment', backref='user', lazy=True, cascade='all, delete-orphan')
-    images = relationship('Image', backref='uploader', lazy=True, cascade='all, delete-orphan')
-    rewards_offered = relationship('Reward', foreign_keys='Reward.offered_by_id', backref='offered_by_user', cascade='all, delete-orphan')
-    rewards_received = relationship('Reward', foreign_keys='Reward.received_by_id', backref='received_by_user', cascade='all, delete-orphan')
+    items_reported = relationship('Item', backref='reporter',
+        foreign_keys='Item.reporter_id', cascade='all, delete-orphan')
+    comments = relationship('Comment', backref='user', cascade='all, delete-orphan')
+    images = relationship('Image', backref='uploader', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f"<User #{self.id} - {self.username} ({self.role})>"
 
     @validates('email')
     def validate_email(self, key, email):
-        if email:
-            if '@' not in email or '.' not in email:
-                raise ValueError("Please provide a suitable email address")
+        if email and ('@' not in email or '.' not in email):
+            raise ValueError("Please provide a suitable email address")
         return email
 
     @hybrid_property
@@ -51,17 +37,17 @@ class User(db.Model, SerializerMixin):
     def authenticate(self, password):
         return self._password_hash and bcrypt.check_password_hash(self._password_hash, password.encode())
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "role": self.role
+        }
 
-class Item(db.Model, SerializerMixin):
+
+class Item(db.Model):
     __tablename__ = "items"
-
-    serialize_rules = (
-        '-comments.item',
-        '-claims.item',
-        '-reward.item',
-        '-images.item',
-        '-reporter.items_reported',
-    )
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
@@ -73,19 +59,30 @@ class Item(db.Model, SerializerMixin):
     reporter_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     inventory_admin_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    comments = relationship('Comment', backref='item', lazy=True, cascade='all, delete-orphan')
-    claims = relationship('Claim', backref='item', lazy=True, cascade='all, delete-orphan')
+    comments = relationship('Comment', backref='item', cascade='all, delete-orphan')
+    claims = relationship('Claim', backref='item', cascade='all, delete-orphan')
     reward = relationship('Reward', uselist=False, backref='item', cascade='all, delete-orphan')
-    images = relationship('Image', backref='item', lazy=True, cascade='all, delete-orphan')
+    images = relationship('Image', backref='item', cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "status": self.status,
+            "location": self.location,
+            "date_reported": self.date_reported.isoformat() if self.date_reported else None,
+            "reporter": self.reporter.to_dict() if self.reporter else None,
+            "inventory_admin_id": self.inventory_admin_id,
+            "comments": [c.to_dict() for c in self.comments],
+            "claims": [c.to_dict() for c in self.claims],
+            "reward": self.reward.to_dict() if self.reward else None,
+            "images": [img.to_dict() for img in self.images]
+        }
 
 
-class Claim(db.Model, SerializerMixin):
+class Claim(db.Model):
     __tablename__ = "claims"
-
-    serialize_rules = (
-        '-item.claims',
-        '-claimant.claims',
-    )
 
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
@@ -94,14 +91,22 @@ class Claim(db.Model, SerializerMixin):
     claimed_at = db.Column(db.DateTime, default=datetime.utcnow)
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
+    claimant = relationship('User', foreign_keys=[claimant_id], backref='claims')
+    approver = relationship('User', foreign_keys=[approved_by], backref='claims_approved')
 
-class Comment(db.Model, SerializerMixin):
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "item_id": self.item_id,
+            "claimant": self.claimant.to_dict() if self.claimant else None,
+            "status": self.status,
+            "claimed_at": self.claimed_at.isoformat() if self.claimed_at else None,
+            "approved_by": self.approver.to_dict() if getattr(self, 'approver', None) else None
+        }
+
+
+class Comment(db.Model):
     __tablename__ = "comments"
-
-    serialize_rules = (
-        '-item.comments',
-        '-user.comments',
-    )
 
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String, nullable=False)
@@ -109,36 +114,56 @@ class Comment(db.Model, SerializerMixin):
     item_id = db.Column(db.Integer, db.ForeignKey('items.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "content": self.content,
+            "user": self.user.to_dict() if self.user else None,
+            "item_id": self.item_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
 
-class Reward(db.Model, SerializerMixin):
+
+class Reward(db.Model):
     __tablename__ = "rewards"
-
-    serialize_rules = (
-        '-item.reward',
-        '-offered_by_user.rewards_offered',
-        '-received_by_user.rewards_received',
-    )
 
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
     offered_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     received_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-
     amount = db.Column(db.Float, nullable=False)
     status = db.Column(db.String, default="offered")
     paid_at = db.Column(db.DateTime, nullable=True)
 
+    offered_by_user = relationship('User', foreign_keys=[offered_by_id], backref='rewards_offered')
+    received_by_user = relationship('User', foreign_keys=[received_by_id], backref='rewards_received')
 
-class Image(db.Model, SerializerMixin):
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "item_id": self.item_id,
+            "offered_by": self.offered_by_user.to_dict() if self.offered_by_user else None,
+            "received_by": self.received_by_user.to_dict() if self.received_by_user else None,
+            "amount": self.amount,
+            "status": self.status,
+            "paid_at": self.paid_at.isoformat() if self.paid_at else None
+        }
+
+
+class Image(db.Model):
     __tablename__ = "images"
-
-    serialize_rules = (
-        '-item.images',
-        '-uploader.images',
-    )
 
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
     image_url = db.Column(db.String, nullable=False)
     uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "item_id": self.item_id,
+            "image_url": self.image_url,
+            "uploaded_by": self.uploaded_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }

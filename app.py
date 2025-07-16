@@ -4,7 +4,6 @@ from flask_jwt_extended import (
     JWTManager, jwt_required, create_access_token, get_jwt_identity
 )
 from flask_restful import Api
-# from flask_cors import CORS
 from datetime import datetime
 from functools import wraps
 
@@ -23,8 +22,6 @@ migrate = Migrate(app, db)
 api = Api(app)
 jwt = JWTManager(app)
 
-
-
 def admin_only(fn):
     @wraps(fn)
     @jwt_required()
@@ -39,45 +36,34 @@ def admin_only(fn):
 def index():
     return "I just wanted to let you know the routes work now 💃 Let's test them 💋 ..sincerely, Cristina."
 
-
-
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
-
+    role = data.get('role', 'user')
     if not username or not password:
         return jsonify({"error": "Username and password needed"}), 400
-    
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already taken"}), 400
-    
-    user = User(username=username, email=email)
+    user = User(username=username, email=email, role=role)
     user.password_hash = password
-
     db.session.add(user)
     db.session.commit()
-
     token = create_access_token(identity=user.id)
     return jsonify({"user": user.to_dict(), "token": token}), 201
-
-
 
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")
-
     user = User.query.filter_by(username=username).first()
     if user and user.authenticate(password):
         token = create_access_token(identity=user.id)
         return jsonify({"user": user.to_dict(), "token": token}), 200
     return jsonify({"error": "Invalid username or password"}), 401
-
-
 
 @app.route('/me', methods=['GET'])
 @jwt_required()
@@ -86,14 +72,10 @@ def me():
     user = User.query.get(user_id)
     return jsonify(user.to_dict()), 200
 
-
-
 @app.route('/users', methods=['GET'])
 @admin_only
 def get_users():
     return jsonify([u.to_dict() for u in User.query.all()]), 200
-
-
 
 @app.route('/items', methods=['GET'])
 def get_items():
@@ -134,8 +116,6 @@ def delete_item(id):
     db.session.commit()
     return jsonify({"message": "Item deleted"}), 204
 
-
-
 @app.route('/claims', methods=['POST'])
 @admin_only
 def claim_item():
@@ -154,8 +134,6 @@ def approve_claim(id):
     claim.approved_by = get_jwt_identity()
     db.session.commit()
     return jsonify(claim.to_dict()), 200
-
-
 
 @app.route('/comments', methods=['POST'])
 @jwt_required()
@@ -177,16 +155,12 @@ def edit_comment(id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     comment = Comment.query.get_or_404(id)
-
     if comment.user_id != user_id and user.role != "admin":
         return jsonify({"error": "Not authorized to edit this comment"}), 403
-
     if 'content' in data:
         comment.content = data['content']
         db.session.commit()
-
     return jsonify(comment.to_dict()), 200
-
 
 @app.route('/comments', methods=['GET'])
 def get_comments():
@@ -198,15 +172,11 @@ def delete_comment(id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     comment = Comment.query.get_or_404(id)
-
     if comment.user_id != user_id and user.role != "admin":
         return jsonify({"error": "Not authorized to delete this comment"}), 403
-
     db.session.delete(comment)
     db.session.commit()
     return jsonify({"message": "Comment deleted"}), 204
-
-
 
 @app.route('/rewards', methods=['POST'])
 @jwt_required()
@@ -239,8 +209,6 @@ def reward_history():
     received = [r.to_dict() for r in Reward.query.filter_by(received_by_id=user_id)]
     return jsonify({"offered": offered, "received": received}), 200
 
-
-
 @app.route('/images', methods=['POST'])
 @jwt_required()
 def upload_image():
@@ -260,15 +228,11 @@ def delete_image(id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     image = Image.query.get_or_404(id)
-
     if image.uploaded_by != user_id and user.role != "admin":
         return jsonify({"error": "Not authorized to delete this image"}), 403
-
     db.session.delete(image)
     db.session.commit()
     return jsonify({"message": "Image deleted"}), 204
-
-
 
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
