@@ -42,7 +42,7 @@ def log_admin_action(admin_id, action_desc):
 
 @app.route('/')
 def index():
-    return "Routes are active."
+    return "Bruh no need to worry these routes are purfeeect just look into the read me !."
 
 @app.route('/register', methods=['POST'])
 def register():

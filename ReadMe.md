@@ -15,3 +15,4 @@
 ![alt text](image-14.png) -- approve claim(admin)
 ![alt text](image-15.png) -- get all users(admin)
 ![alt text](image-16.png) -- delete items (admin)
+![alt text](image-17.png) --- delete item (admin)
