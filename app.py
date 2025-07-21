@@ -7,11 +7,17 @@ from flask_restful import Api
 from datetime import datetime
 from functools import wraps
 import os
-
+from flask_cors import CORS
 from config import db
 from models import User, Item, Claim, Comment, Reward, Image
 
 app = Flask(__name__)
+CORS(app,
+     origins=[
+         "http://localhost:3000",
+         "https://moringa-lost-and-found-frontend.vercel.app"
+     ],
+     supports_credentials=True)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///moringa.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -117,6 +123,7 @@ def report_item():
     db.session.add(item)
     db.session.commit()
     return jsonify(item.to_dict()), 201
+
 
 @app.route('/items/<int:id>', methods=['GET'])
 def get_item(id):
@@ -270,4 +277,4 @@ def delete_image(id):
     return jsonify({"message": "Image deleted"}), 204
 
 if __name__ == '__main__':
-    app.run(port=5555, debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
